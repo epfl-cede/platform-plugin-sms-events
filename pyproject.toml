@@ -1,0 +1,94 @@
+#------------------------------------------------------------------------------
+# PyPi meta data
+#------------------------------------------------------------------------------
+[project]
+name = "platform-plugin-sms-events"
+version = "0.1.0"
+authors = [
+  { name="Oleg Demakov", email="oleg.demakov@epfl.ch" }
+]
+description = "Bridge Open edX lifecycle events to SwissMOOC satellite apps (extras, insights, catalog)."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Django",
+    "Framework :: Django :: 5.2",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Education :: Computer Aided Instruction (CAI)",
+]
+dependencies = [
+  "requests>=2.31,<3",
+]
+
+[project.urls]
+Homepage = "https://github.com/epfl-cede/platform-plugin-sms-events"
+Repository = "https://github.com/epfl-cede/platform-plugin-sms-events"
+Changelog = "https://github.com/epfl-cede/platform-plugin-sms-events/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/epfl-cede/platform-plugin-sms-events/issues"
+
+#------------------------------------------------------------------------------
+# see: https://setuptools.pypa.io/en/latest/userguide/entry_point.html
+#------------------------------------------------------------------------------
+[project.entry-points."cms.djangoapp"]
+openedx_sms_events = "openedx_sms_events.apps:OpenedxSmsEventsConfig"
+
+#------------------------------------------------------------------------------
+# Test-only dependencies (not shipped in the openedx image).
+#   pip install -e ".[test]"
+#------------------------------------------------------------------------------
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<9",
+  "pytest-django>=4,<5",
+  "celery>=5.4,<6",
+  "Django>=4.2,<5.3",
+]
+
+#------------------------------------------------------------------------------
+# Packaging: ship the package (including the tests subpackage so the openedx
+# devstack can run them), but never ship top-level test/config junk.
+#------------------------------------------------------------------------------
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["openedx_sms_events*"]
+
+#------------------------------------------------------------------------------
+# pytest
+#------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "openedx_sms_events.tests.settings"
+python_files = ["test_*.py", "*_tests.py"]
+addopts = "-ra"
+testpaths = ["openedx_sms_events/tests"]
+
+#------------------------------------------------------------------------------
+# black / isort
+#------------------------------------------------------------------------------
+[tool.black]
+line-length = 120
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120

@@ -1,0 +1,11 @@
+# Test-only pinned requirements for running the unit tests outside the openedx
+# devstack (e.g. in CI). Mirror the openedx Ulmo pins where it matters.
+#
+#   pip install -r test_requirements.txt
+#   pytest
+
+pytest==8.3.5
+pytest-django==4.9.0
+celery==5.5.3
+Django==5.2.11
+requests==2.32.5
