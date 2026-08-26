@@ -27,6 +27,17 @@ def _fake_course_key():
     )
 
 
+def _expected_payload(course_key, instance_name=""):
+    """Expected webhook payload for a given course key and instance name."""
+    return {
+        "course_key": str(course_key),
+        "org": course_key.org,
+        "course": course_key.course,
+        "run": course_key.run,
+        "instance_name": instance_name,
+    }
+
+
 def test_receiver_builds_payload_and_defers_to_celery(settings):
     settings.INSTANCE_NAME = "epfl"
     course_key = _fake_course_key()
@@ -44,22 +55,14 @@ def test_receiver_builds_payload_and_defers_to_celery(settings):
     with mock.patch.object(signals.notify_course_published, "delay") as delay:
         deferred[0]()
 
-    delay.assert_called_once_with(
-        {
-            "course_key": "course-v1:EPFL+DemoX+2025_T1",
-            "org": "EPFL",
-            "course": "DemoX",
-            "run": "2025_T1",
-            "instance_name": "epfl",
-        }
-    )
+    delay.assert_called_once_with(_expected_payload(course_key, instance_name="epfl"))
 
 
 def test_payload_includes_instance_name_from_settings(settings):
     """instance_name distinguishes the deployment, not the openedx org."""
     settings.INSTANCE_NAME = "ethz"
     course_key = _fake_course_key()
-    payload = signals._build_payload(course_key)
+    payload = signals.build_payload(course_key)
     assert payload["instance_name"] == "ethz"
     assert payload["org"] == "EPFL"
 
@@ -68,7 +71,7 @@ def test_payload_instance_name_defaults_to_empty_when_unset(settings):
     """A missing INSTANCE_NAME must not crash the receiver."""
     del settings.INSTANCE_NAME
     course_key = _fake_course_key()
-    payload = signals._build_payload(course_key)
+    payload = signals.build_payload(course_key)
     assert payload["instance_name"] == ""
 
 

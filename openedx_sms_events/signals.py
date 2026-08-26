@@ -20,22 +20,14 @@ from openedx_sms_events.tasks import notify_course_published
 log = logging.getLogger(__name__)
 
 
-def _build_payload(course_key):
-    """
-    Build the webhook payload from a course key.
-
-    ``instance_name`` is the swissmooc *deployment* instance (epfl, ethz,
-    oleg, ...) from ``settings.INSTANCE_NAME`` (injected per instance by the
-    Tutor ``openedx-common-settings`` patch). It is distinct from the Open edX
-    ``org`` (e.g. EPFL, EPFLx), which is an internal org *within* an instance;
-    the extras app uses ``instance_name`` to tell deployments apart.
-    """
+def build_payload(course_key):
+    """Build the webhook payload from a course key."""
     return {
         "course_key": str(course_key),
         "org": course_key.org,
         "course": course_key.course,
         "run": course_key.run,
-        "instance_name": getattr(settings, "INSTANCE_NAME", "") or "",
+        "instance_name": getattr(settings, "INSTANCE_NAME", ""),
     }
 
 
@@ -50,5 +42,5 @@ def on_course_published(sender, course_key, **kwargs):
     scheduled via ``transaction.on_commit`` so it only fires if the surrounding
     publish transaction actually commits.
     """
-    payload = _build_payload(course_key)
+    payload = build_payload(course_key)
     transaction.on_commit(lambda: notify_course_published.delay(payload))
