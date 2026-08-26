@@ -19,6 +19,7 @@ PAYLOAD = {
     "org": "EPFL",
     "course": "DemoX",
     "run": "2025_T1",
+    "instance_name": "epfl",
 }
 
 

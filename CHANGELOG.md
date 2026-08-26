@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial package structure with `OpenedxSMSEventsConfig` Django app registered
   as a `cms.djangoapp` plugin entry point.
 - `course_published` signal receiver that schedules a Celery task after the
-  Studio publish transaction commits.
+  Studio publish transaction commits. Payload includes `instance_name`
+  (from `settings.INSTANCE_NAME`) so the extras app can distinguish
+  deployments, separate from the Open edX internal `org`.
 - `notify_course_published` Celery task that POSTs the course key, org, course,
   and run to a configurable swissmooc-extras webhook, with bearer-token auth,
   configurable timeout, and exponential backoff retries.

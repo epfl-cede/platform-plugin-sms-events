@@ -27,7 +27,8 @@ def _fake_course_key():
     )
 
 
-def test_receiver_builds_payload_and_defers_to_celery():
+def test_receiver_builds_payload_and_defers_to_celery(settings):
+    settings.INSTANCE_NAME = "epfl"
     course_key = _fake_course_key()
     deferred = []
 
@@ -49,8 +50,26 @@ def test_receiver_builds_payload_and_defers_to_celery():
             "org": "EPFL",
             "course": "DemoX",
             "run": "2025_T1",
+            "instance_name": "epfl",
         }
     )
+
+
+def test_payload_includes_instance_name_from_settings(settings):
+    """instance_name distinguishes the deployment, not the openedx org."""
+    settings.INSTANCE_NAME = "ethz"
+    course_key = _fake_course_key()
+    payload = signals._build_payload(course_key)
+    assert payload["instance_name"] == "ethz"
+    assert payload["org"] == "EPFL"
+
+
+def test_payload_instance_name_defaults_to_empty_when_unset(settings):
+    """A missing INSTANCE_NAME must not crash the receiver."""
+    del settings.INSTANCE_NAME
+    course_key = _fake_course_key()
+    payload = signals._build_payload(course_key)
+    assert payload["instance_name"] == ""
 
 
 def test_receiver_is_connected_to_course_published():

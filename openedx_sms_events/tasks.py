@@ -42,7 +42,8 @@ def notify_course_published(self, payload):
             "course_key": "course-v1:EPFL+DemoX+2025_T1",
             "org": "EPFL",
             "course": "DemoX",
-            "run": "2025_T1"
+            "run": "2025_T1",
+            "instance_name": "epfl"
         }
 
     The call is made here (in a Celery worker), never in the Studio request

@@ -36,9 +36,16 @@ The task POSTs the payload to the configured swissmooc-extras webhook:
   "course_key": "course-v1:EPFL+DemoX+2025_T1",
   "org": "EPFL",
   "course": "DemoX",
-  "run": "2025_T1"
+  "run": "2025_T1",
+  "instance_name": "epfl"
 }
 ```
+
+`instance_name` is the swissmooc *deployment* instance (`epfl`, `ethz`,
+`oleg`, …) from `settings.INSTANCE_NAME`, injected per instance by the Tutor
+`openedx-common-settings` patch. It is distinct from the Open edX `org`
+(`EPFL`, `EPFLx`, …), which is an internal org *within* an instance; the
+extras app uses `instance_name` to tell deployments apart.
 
 Failed calls are retried with exponential backoff (up to 5 retries) and logged.
 
