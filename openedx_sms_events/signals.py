@@ -27,9 +27,11 @@ from openedx_sms_events.dispatcher import deliver_event
 
 log = logging.getLogger(__name__)
 
-# Event type names. Each wired signal publishes one of these as the
-# ``event_type`` argument to :func:`deliver_event.delay`; subscribers opt into
-# them (or into ``"*"``) via ``SMS_EVENTS["subscribers"][...]["events"]``.
+# Event type names. Each wired signal publishes one of these both as the
+# ``event_type`` argument to :func:`deliver_event.delay` (for routing) and as
+# the ``event_type`` field in the payload body (so a generic subscriber
+# endpoint can dispatch on it). Subscribers opt into them (or into ``"*"``)
+# via ``SMS_EVENTS["subscribers"][...]["events"]``.
 COURSE_PUBLISHED = "course_published"
 
 
@@ -38,10 +40,11 @@ def build_payload(course_key):
     Build the ``course_published`` event payload from a course key.
 
     The payload is a self-describing event envelope: a stable
-    :data:`event_id` / :data:`occurred_at` identity plus the course fields
-    downstream consumers need. ``event_id`` is generated once, here in the
-    signal receiver, and is then immutable for the lifetime of the event —
-    every dispatcher retry redelivers the same payload, so consumers can
+    :data:`event_id` / :data:`occurred_at` identity, the :data:`event_type`
+    (so a generic subscriber endpoint can dispatch on it), plus the course
+    fields downstream consumers need. ``event_id`` is generated once, here in
+    the signal receiver, and is then immutable for the lifetime of the event
+    — every dispatcher retry redelivers the same payload, so consumers can
     deduplicate retries on ``event_id`` (one row, not many).
 
     ``occurred_at`` is the publish time (when the signal fired), captured in
@@ -50,8 +53,9 @@ def build_payload(course_key):
     """
     return {
         "event_id": str(uuid.uuid4()),
+        "event_type": COURSE_PUBLISHED,
         "occurred_at": timezone.now().isoformat(),
-        "course_key": str(course_key),,
+        "course_key": str(course_key),
         "org": course_key.org,
         "course": course_key.course,
         "run": course_key.run,

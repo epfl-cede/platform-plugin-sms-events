@@ -51,6 +51,7 @@ def test_receiver_builds_payload_and_defers_to_dispatcher(settings):
 
     delay.assert_called_once_with(signals.COURSE_PUBLISHED, mock.ANY)
     _, args, _ = delay.mock_calls[-1]
+    assert args[1]["event_type"] == "course_published"
     assert args[1]["course_key"] == "course-v1:EPFL+DemoX+2025_T1"
     assert args[1]["org"] == "EPFL"
     assert args[1]["course"] == "DemoX"
@@ -72,6 +73,7 @@ def test_payload_carries_stable_event_identity(settings):
 
     for payload in (payload_a, payload_b):
         assert payload["event_id"]  # non-empty
+        assert payload["event_type"] == "course_published"
         assert payload["occurred_at"]  # non-empty ISO timestamp
 
     # Two publishes of the same course get distinct identities.

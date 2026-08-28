@@ -24,7 +24,8 @@ independently.
 `SignalHandler.course_published` (fired by Studio on every course publish) is
 connected to `openedx_sms_events.signals.on_course_published`, which:
 
-1. Builds a self-describing event payload from the course key, including a
+1. Builds a self-describing event payload from the course key, including the
+   `event_type` (so a generic subscriber endpoint can dispatch on it) and a
    stable `event_id` / `occurred_at` identity so downstream consumers can
    deduplicate retries.
 2. Schedules the `deliver_event` Celery task (the dispatcher) via
@@ -39,6 +40,7 @@ than the retired single-endpoint task. The payload POSTed to extras:
 ```json
 {
   "event_id": "9f1c...-...-...",
+  "event_type": "course_published",
   "occurred_at": "2025-01-31T14:09:00.000000+00:00",
   "course_key": "course-v1:EPFL+DemoX+2025_T1",
   "org": "EPFL",

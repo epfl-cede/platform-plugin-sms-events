@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The retired single-endpoint `notify_course_published` task and the
   `openedx_sms_events.tasks` module have been removed — there is now one
   delivery path, not two.
-- The `course_published` payload is now a self-describing event envelope with a
-  stable `event_id` (uuid4, generated once in the signal receiver) and
+- The `course_published` payload is now a self-describing event envelope with
+  the `event_type` (so a generic subscriber endpoint can dispatch on it), a
+  stable `event_id` (uuid4, generated once in the signal receiver), and
   `occurred_at` (UTC publish time), so downstream consumers can deduplicate
   dispatcher retries on `event_id`.
 - The default `SMS_EVENTS` is now the subscriber-list shape: extras as the one
@@ -25,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The swissmooc-swarm Tutor runtime patch (`tutor/plugins/sms-events.py`)
   renders the per-instance subscriber list (URLs, per-subscriber tokens,
   event-type routing); a rendered instance config shows extras subscribed.
+
+### Fixed
+- Syntax error in `signals.py` (stray double comma on the `course_key`
+  payload field) that went undetected because the module is never imported in
+  the unit-test environment (it pulls in `xmodule`, so the signal tests skip
+  outside the openedx image).
 
 ### Added
 - Generic event dispatcher (`openedx_sms_events.dispatcher`) that fans one
@@ -50,3 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   token, timeout, and a reserved `org_to_tenant` mapping), overridable per
   instance via Tutor runtime patches.
 - Unit tests for the task and signal wiring.
+- Byte-compile test (`tests/test_compile.py`) that syntax-checks every module
+  in the package, guarding the `xmodule`-gated `signals.py` (unimportable in
+  the unit-test env) against silent syntax errors.
