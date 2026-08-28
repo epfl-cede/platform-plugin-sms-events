@@ -49,6 +49,44 @@ extras app uses `instance_name` to tell deployments apart.
 
 Failed calls are retried with exponential backoff (up to 5 retries) and logged.
 
+## Generic event dispatcher (expand phase)
+
+`openedx_sms_events.dispatcher` is the generalized delivery machinery that
+will replace the single-endpoint task above. It is landed **alongside**
+`notify_course_published`, which remains the live path; nothing routes through
+the dispatcher yet. The module separates three responsibilities behind a tiny
+interface:
+
+- **Routing** — `matching_subscribers(event_type, config)`, a pure function.
+  A subscriber matches if its `events` list contains the event type or the
+  `"*"` wildcard; an empty/missing `events` list opts out (fail safe).
+- **Fan-out** — `deliver_event(event_type, payload)`, a Celery task that
+  schedules one delivery task per matching subscriber. It has **no autoretry**:
+  it only schedules children, so retrying it would duplicate every delivery.
+- **Delivery** — `deliver_to_subscriber(name, event_type, payload)`, a Celery
+  task that POSTs to one subscriber, looked up by name at call time so
+  URL/token changes take effect on the next attempt. Autoretry with exponential
+  backoff (max 5, 600s cap). A missing subscriber or empty URL is a logged
+  no-op, not an error.
+
+The subscriber list is configured under `SMS_EVENTS["subscribers"]`:
+
+```python
+SMS_EVENTS = {
+    "subscribers": [
+        {"name": "extras",  "url": "...", "auth_token": "...", "timeout": 5.0, "events": ["*"]},
+        {"name": "catalog", "url": "...", "auth_token": "...", "timeout": 5.0, "events": ["course_published", "enrollment"]},
+    ],
+}
+```
+
+The dispatcher imports no edx-platform modules (`xmodule`/`opaque_keys`), so
+it unit-tests with the same minimal Django + Celery + requests stack as the
+task tests. The edx-importing seam stays isolated in `signals.py`. Adding an
+event type will be a thin `@receiver` that builds a payload and calls
+`deliver_event.delay(event_type, payload)`; adding a consumer will be a row in
+`subscribers`.
+
 ## Future extensions
 
 Additional signal listeners (enrollment, certificate, grade, library update)

@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Generic event dispatcher (`openedx_sms_events.dispatcher`) that fans one
+  event type out to N configured subscribers, alongside the existing
+  single-endpoint `notify_course_published` task (which stays the live path).
+  The dispatcher separates three responsibilities behind a tiny interface:
+  `matching_subscribers` (pure routing by event type / `"*"` wildcard),
+  `deliver_event` (fan-out Celery task, no autoretry — it only schedules
+  children), and `deliver_to_subscriber` (per-subscriber POST with exponential
+  backoff, max 5 retries, 600s cap; missing subscriber or empty URL is a logged
+  no-op). Subscribers are looked up by name at call time so URL/token changes
+  take effect on the next attempt. The module imports no edx-platform code,
+  so it unit-tests outside the openedx image. Nothing routes through it yet.
 - Initial package structure with `OpenedxSMSEventsConfig` Django app registered
   as a `cms.djangoapp` plugin entry point.
 - `course_published` signal receiver that schedules a Celery task after the
