@@ -27,35 +27,55 @@ def _fake_course_key():
     )
 
 
-def _expected_payload(course_key, instance_name=""):
-    """Expected webhook payload for a given course key and instance name."""
-    return {
-        "course_key": str(course_key),
-        "org": course_key.org,
-        "course": course_key.course,
-        "run": course_key.run,
-        "instance_name": instance_name,
-    }
-
-
-def test_receiver_builds_payload_and_defers_to_celery(settings):
+def test_receiver_builds_payload_and_defers_to_dispatcher(settings):
+    """
+    The receiver must schedule ``deliver_event.delay("course_published", payload)``
+    via ``transaction.on_commit`` — never on the request thread, never on rollback.
+    """
     settings.INSTANCE_NAME = "epfl"
     course_key = _fake_course_key()
     deferred = []
 
     # Capture the on_commit callback instead of running it.
     with mock.patch.object(signals.transaction, "on_commit", side_effect=deferred.append):
-        with mock.patch.object(signals.notify_course_published, "delay") as delay:
+        with mock.patch.object(signals.deliver_event, "delay") as delay:
             signals.on_course_published(sender=None, course_key=course_key)
 
     delay.assert_not_called()
     assert len(deferred) == 1
 
-    # Running the captured callback should schedule the task with the payload.
-    with mock.patch.object(signals.notify_course_published, "delay") as delay:
+    # Running the captured callback should fan the event out via the dispatcher
+    # with the course_published event type and the built payload.
+    with mock.patch.object(signals.deliver_event, "delay") as delay:
         deferred[0]()
 
-    delay.assert_called_once_with(_expected_payload(course_key, instance_name="epfl"))
+    delay.assert_called_once_with(signals.COURSE_PUBLISHED, mock.ANY)
+    _, args, _ = delay.mock_calls[-1]
+    assert args[1]["course_key"] == "course-v1:EPFL+DemoX+2025_T1"
+    assert args[1]["org"] == "EPFL"
+    assert args[1]["course"] == "DemoX"
+    assert args[1]["run"] == "2025_T1"
+    assert args[1]["instance_name"] == "epfl"
+
+
+def test_payload_carries_stable_event_identity(settings):
+    """
+    The payload must carry an event_id + occurred_at so consumers can
+    deduplicate dispatcher retries (one row per event, not one per delivery).
+    event_id is stable for a single publish; two builds produce two distinct
+    ids (one per publish event).
+    """
+    settings.INSTANCE_NAME = "epfl"
+    course_key = _fake_course_key()
+    payload_a = signals.build_payload(course_key)
+    payload_b = signals.build_payload(course_key)
+
+    for payload in (payload_a, payload_b):
+        assert payload["event_id"]  # non-empty
+        assert payload["occurred_at"]  # non-empty ISO timestamp
+
+    # Two publishes of the same course get distinct identities.
+    assert payload_a["event_id"] != payload_b["event_id"]
 
 
 def test_payload_includes_instance_name_from_settings(settings):

@@ -1,11 +1,11 @@
 """
 Generic event fan-out: one event type → N subscriber webhooks.
 
-This is the deepened shape of the package. The original ``notify_course_published``
-task (in ``tasks.py``) shipped one event type to one hardwired URL. As more
-event types and more satellite apps need events, that 1:1 shape doesn't scale:
-every new consumer would mean a new task, and every new event type would mean
-touching every task.
+This is the delivery shape of the package. It replaces the original
+single-endpoint ``notify_course_published`` task, which shipped one event type
+to one hardwired URL. As more event types and more satellite apps need events,
+that 1:1 shape doesn't scale: every new consumer would mean a new task, and
+every new event type would mean touching every task.
 
 The dispatcher inverts it into a small, deep module — a lot of behaviour
 (routing, auth, retry, backoff, fan-out, per-subscriber isolation) behind a
@@ -28,7 +28,7 @@ Both tasks are free of edx-platform imports (``xmodule``/``opaque_keys``), so
 they unit-test with a minimal Django + Celery + requests stack, like the
 existing task tests. The edx-importing seam stays in ``signals.py``.
 
-Settings shape (the ``subscribers`` key replaces the single
+Settings shape (the ``subscribers`` list replaced the single
 ``course_published_webhook_url``/``auth_token`` pair)::
 
     SMS_EVENTS = {
@@ -67,9 +67,9 @@ ALL_EVENTS = "*"
 # or gives a non-numeric value.
 DEFAULT_TIMEOUT = 5.0
 
-# Retry policy shared with the legacy ``notify_course_published`` task: any
-# network/HTTP failure retried with exponential backoff, capped, jittered, up
-# to 5 times. This covers short reboot windows (~10 min) of a consumer app.
+# Retry policy: any network/HTTP failure retried with exponential backoff,
+# capped, jittered, up to 5 times. This covers short reboot windows (~10 min)
+# of a consumer app. (The same policy the retired single-endpoint task used.)
 MAX_RETRIES = 5
 RETRY_BACKOFF_MAX = 600
 

@@ -19,20 +19,27 @@ Packaging the listeners here (rather than patching the `epfl-cede/edx-platform`
 fork) keeps the fork close to upstream and lets the satellite apps evolve
 independently.
 
-## What it does today
+## What it does
 
 `SignalHandler.course_published` (fired by Studio on every course publish) is
 connected to `openedx_sms_events.signals.on_course_published`, which:
 
-1. Builds a plain-dict payload from the course key.
-2. Schedules the `notify_course_published` Celery task via
-   `transaction.on_commit`, so the HTTP call only runs if the publish
+1. Builds a self-describing event payload from the course key, including a
+   stable `event_id` / `occurred_at` identity so downstream consumers can
+   deduplicate retries.
+2. Schedules the `deliver_event` Celery task (the dispatcher) via
+   `transaction.on_commit`, so the fan-out only runs if the publish
    transaction commits — and never on the Studio request thread.
 
-The task POSTs the payload to the configured swissmooc-extras webhook:
+The dispatcher fans the event out to every subscriber that opted into
+`course_published` (or `"*"`). Today there is one subscriber, swissmooc-extras,
+so a publish reaches extras's existing webhook — now via the dispatcher rather
+than the retired single-endpoint task. The payload POSTed to extras:
 
 ```json
 {
+  "event_id": "9f1c...-...-...",
+  "occurred_at": "2025-01-31T14:09:00.000000+00:00",
   "course_key": "course-v1:EPFL+DemoX+2025_T1",
   "org": "EPFL",
   "course": "DemoX",
@@ -45,17 +52,18 @@ The task POSTs the payload to the configured swissmooc-extras webhook:
 `oleg`, …) from `settings.INSTANCE_NAME`, injected per instance by the Tutor
 `openedx-common-settings` patch. It is distinct from the Open edX `org`
 (`EPFL`, `EPFLx`, …), which is an internal org *within* an instance; the
-extras app uses `instance_name` to tell deployments apart.
+extras app uses `instance_name` to tell deployments apart. `event_id` is
+generated once in the signal receiver and is immutable across the dispatcher's
+retry chain, so a redelivery produces one row on the consumer side, not many.
 
-Failed calls are retried with exponential backoff (up to 5 retries) and logged.
+Failed deliveries are retried per subscriber with exponential backoff (up to 5
+retries, 600s cap) and logged; one dead consumer cannot stall another, because
+each gets its own task with its own retry chain.
 
-## Generic event dispatcher (expand phase)
+## Generic event dispatcher
 
-`openedx_sms_events.dispatcher` is the generalized delivery machinery that
-will replace the single-endpoint task above. It is landed **alongside**
-`notify_course_published`, which remains the live path; nothing routes through
-the dispatcher yet. The module separates three responsibilities behind a tiny
-interface:
+`openedx_sms_events.dispatcher` is the delivery machinery. It separates three
+responsibilities behind a tiny interface:
 
 - **Routing** — `matching_subscribers(event_type, config)`, a pure function.
   A subscriber matches if its `events` list contains the event type or the
@@ -83,29 +91,27 @@ SMS_EVENTS = {
 The dispatcher imports no edx-platform modules (`xmodule`/`opaque_keys`), so
 it unit-tests with the same minimal Django + Celery + requests stack as the
 task tests. The edx-importing seam stays isolated in `signals.py`. Adding an
-event type will be a thin `@receiver` that builds a payload and calls
-`deliver_event.delay(event_type, payload)`; adding a consumer will be a row in
+event type is a thin `@receiver` that builds a payload and calls
+`deliver_event.delay(event_type, payload)`; adding a consumer is a row in
 `subscribers`.
 
 ## Future extensions
 
 Additional signal listeners (enrollment, certificate, grade, library update)
-and URL handlers for insights/catalog will live in this same package.
+and URL handlers for catalog will live in this same package.
 
 ## Configuration
 
-Settings live under the `SMS_EVENTS` dict:
+Settings live under the `SMS_EVENTS` dict, in the subscriber-list shape:
 
-| Key | Default | Purpose |
-| --- | --- | --- |
-| `course_published_webhook_url` | `""` | swissmooc-extras endpoint. Empty => the task is a no-op. |
-| `auth_token` | `""` | Shared bearer token sent as `Authorization: Bearer <token>`. |
-| `timeout` | `5.0` | Per-request HTTP timeout in seconds. |
-| `org_to_tenant` | `{}` | Reserved for future per-tenant event routing; unused by the `course_published` listener. |
+| Key | Purpose |
+| --- | --- |
+| `subscribers` | List of subscriber dicts. Each has `name` (stable id), `url`, `auth_token` (per-subscriber bearer token), `timeout` (per-request HTTP seconds), and `events` (event types to opt into, or `["*"]` for all). An empty `url` makes that subscriber a no-op. |
 
-The package ships safe defaults via its `settings/common.py` plugin hook. Per
-instance, values are rendered by the Tutor runtime patch
-(`openedx-cms-common-settings`) in [swissmooc-swarm][swarm] and override the
+The package ships safe defaults via its `settings/common.py` plugin hook:
+extras as the one subscriber with an empty URL (no-op until configured). Per
+instance, the subscriber list is rendered by the Tutor runtime patch
+(`openedx-cms-common-settings`) in [swissmooc-swarm][swarm] and overrides the
 defaults.
 
 ## Build & runtime integration
@@ -115,8 +121,8 @@ wired in the deployment repos, not here:
 
 - **Build:** `swissmooc-tutor/plugins/sms-build-events.py` pip-installs this
   package from a pinned git SHA into the CMS image.
-- **Runtime:** `swissmooc-swarm/tutor/plugins/sms-events.py` injects the
-  `SMS_EVENTS` settings and `SMS_EVENTS_*` config defaults.
+- **Runtime:** `swissmooc-swarm/tutor/plugins/sms-events.py` renders the
+  per-instance `SMS_EVENTS` subscriber list and `SMS_EVENTS_*` config defaults.
 
 See [swissmooc-tutor#10](https://github.com/epfl-cede/swissmooc-tutor/issues/10)
 for the full integration plan.
@@ -125,7 +131,7 @@ for the full integration plan.
 
 ### Unit tests (no openedx required)
 
-The task tests run with a minimal Django + Celery + requests stack:
+The dispatcher tests run with a minimal Django + Celery + requests stack:
 
 ```bash
 pip install -r test_requirements.txt

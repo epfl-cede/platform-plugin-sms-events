@@ -9,8 +9,8 @@ These cover the three responsibilities the dispatcher separates:
     per match, with per-subscriber failure isolation.
   - **delivery** — ``deliver_to_subscriber`` does the POST with backoff retry.
 
-Task bodies are exercised via ``Task.run`` (no broker required), matching the
-style of ``test_tasks.py``. The fan-out step mocks ``deliver_to_subscriber.delay``.
+Task bodies are exercised via ``Task.run`` (no broker required). The fan-out
+step mocks ``deliver_to_subscriber.delay``.
 """
 
 from unittest import mock
